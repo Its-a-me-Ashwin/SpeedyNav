@@ -9,6 +9,7 @@ import os
 from datetime import datetime
 from skimage.restoration import denoise_tv_chambolle
 
+# Modify the Camera class to add a method for capturing frames
 class Camera:
     def __init__(self, config, filters=None):
         self.pipeline = rs.pipeline()
@@ -105,6 +106,80 @@ class Camera:
         
         return depth_image_filtered
 
+    def capture_frame(self):
+        # Wait for a coherent pair of frames: depth and color
+        frames = self.pipeline.wait_for_frames()
+        
+        # Align the depth frame to the color frame
+        aligned_frames = self.align.process(frames)
+
+        # Get aligned frames
+        depth_frame = aligned_frames.get_depth_frame()
+        color_frame = aligned_frames.get_color_frame()
+        if not depth_frame or not color_frame:
+            return None, None
+
+        # Process the depth frame
+        depth_image_filtered = None
+        if self.enableFilters:
+            depth_image_filtered = self.process_depth_frame(depth_frame)
+        else:
+            depth_image_filtered = np.asanyarray(depth_frame.get_data())
+
+        # Convert the color frame to numpy array
+        color_image = np.asanyarray(color_frame.get_data())
+
+        return color_image, depth_image_filtered
+
+
+    def long_exposure(self, exposure_time=1):
+        num_frames = int(exposure_time * 30) ## It is set to 30FPS. I dont know how to change it. Alos depend on CPU useage.
+        color_accumulator = None
+        depth_accumulator = None
+        for i in range(num_frames):
+            frames = self.pipeline.wait_for_frames()
+            aligned_frames = self.align.process(frames)
+            depth_frame = aligned_frames.get_depth_frame()
+            color_frame = aligned_frames.get_color_frame()
+
+            if not depth_frame or not color_frame:
+                continue
+
+            # Convert frames to numpy arrays
+            color_image = np.asanyarray(color_frame.get_data())
+            depth_image = np.asanyarray(depth_frame.get_data())
+
+            # Initialize accumulators
+            if color_accumulator is None:
+                color_accumulator = np.zeros_like(color_image, dtype=np.float32)
+            if depth_accumulator is None:
+                depth_accumulator = np.zeros_like(depth_image, dtype=np.float32)
+
+            # Accumulate frames
+            color_accumulator += color_image
+            depth_accumulator += depth_image
+
+        # Compute the average
+        color_avg = (color_accumulator / num_frames).astype(np.uint8)
+        depth_avg = (depth_accumulator / num_frames).astype(np.uint16)
+
+        print("Long exposure completed.")
+        return color_avg, depth_avg 
+
+    def save_images(color_filename, depth_filename, color_image, depth_image):
+        cv2.imwrite(color_filename, color_image)
+        np.save(depth_filename, depth_image)
+
+    def load_images(color_filename, depth_filename):
+        color_image = cv2.imread(color_filename)
+        depth_image = np.load(depth_filename)
+        return color_image, depth_image
+
+    def invert_frame(color_image, depth_image, flip_code=0):
+        inverted_color = cv2.flip(color_image, flip_code)
+        inverted_depth = cv2.flip(depth_image, flip_code)
+        return inverted_color, inverted_depth
+
     def run(self):
         try:
             while True:
@@ -188,6 +263,4 @@ class Camera:
         print(f"Screenshot saved: {screenshot_filename}")
 
 def custom_filters(depth_frame):
-    # depth_frame = np.array(depth_frame, dtype=np.float64)
-    # depth_frame = denoise_tv_chambolle(depth_frame, weight=0.1)
     return depth_frame 

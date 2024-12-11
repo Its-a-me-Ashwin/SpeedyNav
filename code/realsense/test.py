@@ -17,4 +17,10 @@ if __name__ == "__main__":
 
     # Instantiate the Camera class with the loaded configuration
     camera = Camera(config=config, filters=custom_filters)
-    camera.run()
+
+    color_avg, depth_avg = camera.long_exposure(1)
+    color_avg, depth_avg = Camera.invert_frame(color_avg, depth_avg)
+    
+    color_avg_path, depth_avg_path = "./results/color_avg_path.png", "./results/depth_avg_path.npy"
+    Camera.save_images(color_avg_path, depth_avg_path, color_avg, depth_avg)
+    Camera.load_images(color_avg_path, depth_avg_path)

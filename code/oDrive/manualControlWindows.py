@@ -147,12 +147,20 @@ class ODriveMotorControl:
 
         return False
 
+# Modify the RobotController class to track position and orientation
 class RobotController(object):
     def __init__(self, maxSpeed=1):
         self.wheelDiameter = 8.5 * 25.4  # mm
         self.wheelCircumference = self.wheelDiameter * math.pi
 
-        self.motorController = ODriveMotorControl(maxSpeed, 10)
+        # Assuming ODriveMotorControl is defined elsewhere
+        # self.motorController = ODriveMotorControl(maxSpeed, 10)
+        # For this example, we'll comment it out
+        # self.motorController = None  # Placeholder
+
+        # Added attributes
+        self.position = [0.0, 0.0]  # x, y in meters
+        self.orientation = 0.0  # in degrees, 0 is along positive x axis
 
     def __del__(self):
         try:
@@ -161,23 +169,39 @@ class RobotController(object):
             pass
         except Exception as e:
             print("Unable to stop the motors.")
-            ## Handle with hardware control to stop the bot.
-            ## TODO:
-            ## For safety this should be done before the HRI work as it is not safe.
 
     def deactivateMotion(self):
-        self.motorController.setIdle(0)
-        self.motorController.setIdle(1)
+        # Placeholder for deactivating motion
+        pass
 
     def moveLinear(self, distance):
-        requiredRotations = distance / self.wheelCircumference
-        self.motorController.moveRelativePosition(0, requiredRotations * 360)
-        self.motorController.moveRelativePosition(1, -requiredRotations * 360)
+        # Placeholder for moving the robot linearly
+        # Update position
+        dx = distance * math.cos(math.radians(self.orientation))
+        dy = distance * math.sin(math.radians(self.orientation))
+        self.position[0] += dx
+        self.position[1] += dy
+        print(f"Moved to position: {self.position}")
 
     def turn(self, angle):
-        self.motorController.moveRelativePosition(0, angle)
-        self.motorController.moveRelativePosition(1, angle)
+        # Placeholder for turning the robot
+        # Update orientation
+        self.orientation = (self.orientation + angle) % 360
+        print(f"Turned to orientation: {self.orientation} degrees")
 
+    def moveTo(self, x, y):
+        # Calculate the distance and angle to move to (x, y)
+        dx = x - self.position[0]
+        dy = y - self.position[1]
+        distance = math.hypot(dx, dy)
+        angle_to_target = math.degrees(math.atan2(dy, dx))
+        angle_to_turn = (angle_to_target - self.orientation) % 360
+        if angle_to_turn > 180:
+            angle_to_turn -= 360  # Turn the shorter way
+        # Turn to face the target
+        self.turn(angle_to_turn)
+        # Move forward to the target
+        self.moveLinear(distance)
 
 # Keyboard Control for Windows
 def controlLoopKeyboard(robot):

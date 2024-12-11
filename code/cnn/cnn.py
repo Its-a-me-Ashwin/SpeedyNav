@@ -5,7 +5,8 @@ from torchvision import models, transforms
 from PIL import Image
 import matplotlib.pyplot as plt
 
-# Define an EfficientNet-based edge detection model using all but the last layer
+
+## This is the best the tested model. 
 class EfficientNetEdgeNet(nn.Module):
     def __init__(self):
         super(EfficientNetEdgeNet, self).__init__()
@@ -30,6 +31,13 @@ class EfficientNetEdgeNet(nn.Module):
         edge_map = F.interpolate(edge_map, size=x.size()[2:], mode='bilinear', align_corners=False)
         
         return torch.sigmoid(edge_map)
+    
+    def extract_embedding(self, x):
+        features = self.features(x)  # Output shape: [batch_size, 1280, H, W]
+        embedding = F.adaptive_avg_pool2d(features, (1, 1))  # Shape: [batch_size, 1280, 1, 1]
+        embedding = embedding.view(embedding.size(0), -1)    # Flatten to: [batch_size, 1280]
+        return embedding
+
 
 # Load and preprocess images
 def load_image(image_path):
@@ -41,7 +49,21 @@ def load_image(image_path):
     image = Image.open(image_path).convert('RGB')
     return transform(image).unsqueeze(0)
 
-# Display the edge detection result
+def get_image_embedding(model, image_path, device):
+    transform = transforms.Compose([
+        transforms.Resize((256, 256)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+    if type(image_path) == str:
+        image = load_image(image_path).to(device)
+    else:
+        image = transform(image).unsqueeze(0).to(device)
+    model.eval()  # Set the model to evaluation mode
+    with torch.no_grad():
+        embedding = model.extract_embedding(image)
+    return embedding.squeeze().cpu().numpy()
+
 def display_edge_map(image_tensor, edge_map):
     fig, ax = plt.subplots(1, 2, figsize=(12, 6))
     
@@ -53,18 +75,21 @@ def display_edge_map(image_tensor, edge_map):
     ax[0].set_title('Original Image')
     ax[0].axis('off')
     
-    # Display the edge map
+    # Process edge map for better visualization
     edge_np = edge_map.squeeze().detach().cpu().numpy()
-    ax[1].imshow(edge_np, cmap='gray')
+    edge_np = (edge_np - edge_np.min()) / (edge_np.max() - edge_np.min())  # Normalize to [0, 1]
+    
+    ax[1].imshow(edge_np, cmap='gray')  # Use grayscale colormap
     ax[1].set_title('Detected Edges')
     ax[1].axis('off')
     
     plt.show()
 
+
 # Testing EfficientNet-based edge detection model
 def test_efficientnet_edge_model(image_paths):
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    
+    #device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = 'cpu'
     # Initialize the model
     model = EfficientNetEdgeNet().to(device)
     model.eval()  # Set model to evaluation mode
@@ -79,8 +104,12 @@ def test_efficientnet_edge_model(image_paths):
         # Display original image and edge map
         display_edge_map(image.cpu(), edge_map.cpu())
 
-# Example usage
 if __name__ == "__main__":
-    # List of images for testing
-    image_paths = ['path_to_image_1.jpg', 'path_to_image_2.jpg']  # Replace with your image paths
-    test_efficientnet_edge_model(image_paths)
+    image_path = '../realsense/results/color_avg_path.png'
+    #device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = 'cpu' ## For raspberry pi use only CPU
+    model = EfficientNetEdgeNet().to(device)
+    embedding = get_image_embedding(model, image_path, device)
+    #test_efficientnet_edge_model([image_path])
+    print("Image Embedding Shape:", embedding.shape)
+    print("Image Embedding:", embedding)
